@@ -1,0 +1,52 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+  jsonBodyLimit: 1mb
+
+app:
+  name: forum-backend-js
+  profile: dev
+  api:
+    prefix: /api/v1
+  cors:
+    enabled: true
+    credentials: true
+    origins:
+      - http://localhost:3000
+      - http://localhost:5173
+  storage:
+    driver: file
+    filePath: ./data/users.json
+  auth:
+    issueTokenOnRegister: false
+    identifierCaseInsensitive: true
+    usernamePattern: '^[A-Za-z0-9]+$'
+    passwordPolicy:
+      minLength: 8
+      requireUppercase: true
+      requireSpecialCharacter: true
+  security:
+    jwt:
+      secret: change-me-in-production
+      issuer: forum-backend-js
+      audience: forum-frontend
+      expiresIn: 1h
+  mail:
+    enabled: false
+    from: no-reply@example.com
+    sendWelcomeEmail: false
+    welcome:
+      subject: Welcome to the platform
+      text: Hello {{username}}, your account has been created successfully.
+    transport:
+      host: smtp.example.com
+      port: 587
+      secure: false
+      auth:
+        user: smtp-user
+        pass: smtp-password
+
+logging:
+  level: info
+  logRequests: true
+

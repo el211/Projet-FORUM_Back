@@ -1,0 +1,7 @@
+app:
+  mail:
+    enabled: false
+  security:
+    jwt:
+      secret: dev-secret-change-me
+

@@ -1,0 +1,23 @@
+{
+  "name": "forum-backend-js",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Spring Boot-style authentication backend in pure JavaScript",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "helmet": "^7.2.0",
+    "js-yaml": "^4.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.10.1",
+    "uuid": "^9.0.1"
+  }
+}
+
