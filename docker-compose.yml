@@ -17,5 +17,26 @@ services:
       timeout: 5s
       retries: 20
 
+  app:
+    build: .
+    container_name: forum-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      APP_CFG_APP__DATABASE__HOST: mysql
+      APP_CFG_APP__DATABASE__PORT: 3306
+      APP_CFG_APP__DATABASE__USER: root
+      APP_CFG_APP__DATABASE__PASSWORD: root
+      APP_CFG_APP__DATABASE__DATABASE: forum
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persist uploaded message images across restarts.
+      - forum-uploads:/app/data/uploads
+
 volumes:
   forum-mysql-data:
+  forum-uploads:

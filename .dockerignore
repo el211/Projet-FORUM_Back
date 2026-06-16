@@ -1,0 +1,7 @@
+node_modules
+npm-debug.log*
+.git
+.idea
+.claude
+data/uploads
+*.pdf

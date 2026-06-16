@@ -46,18 +46,45 @@ Projet réalisé dans le cadre du module *Projet Forum* (Ynov).
 
 ## Installation & lancement
 
-### 1. Installer les dépendances
+### Tout en Docker (le plus simple)
+
+Une seule commande démarre **le site + la base de données** :
+
+```bash
+docker compose up -d --build
+```
+
+- Le site est disponible sur **http://localhost:8080**
+- La base est créée et remplie automatiquement au premier démarrage
+  (les données sont conservées ensuite, même après un redémarrage).
+
+Commandes utiles :
+
+```bash
+docker compose logs -f app    # voir les logs du site
+docker compose down           # arrêter
+docker compose down -v        # arrêter ET supprimer les données (repart à zéro)
+```
+
+> Pour repartir de zéro avec des données de test fraîches : `docker compose down -v`
+> puis `docker compose up -d --build`.
+
+---
+
+### Lancement manuel (Node local + MySQL)
+
+#### 1. Installer les dépendances
 
 ```bash
 npm install
 ```
 
-### 2. Démarrer MySQL
+#### 2. Démarrer MySQL
 
-**Option A — Docker (recommandé)**
+**Option A — Docker (MySQL seul)**
 
 ```bash
-docker compose up -d
+docker compose up -d mysql
 ```
 
 Cela démarre un MySQL 8 sur le port hôte **3307** (mot de passe `root`, base `forum`).
@@ -67,7 +94,7 @@ Cela démarre un MySQL 8 sur le port hôte **3307** (mot de passe `root`, base `
 Utilisez votre instance MySQL existante (port 3306 par défaut) et adaptez la
 configuration (voir [Configuration](#configuration)).
 
-### 3. Créer le schéma et les données de test
+#### 3. Créer le schéma et les données de test
 
 ```bash
 # Avec le MySQL Docker (port 3307) :
@@ -87,7 +114,7 @@ mysql -u root -p < db/schema.sql
 mysql -u root -p forum < db/seed.sql
 ```
 
-### 4. Lancer le serveur
+#### 4. Lancer le serveur
 
 ```bash
 # Avec le MySQL Docker (port 3307) :
