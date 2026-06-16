@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard · LE FIL</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <header id="topbar"></header>
+
+  <main class="wrap page">
+    <div class="page-head">
+      <span class="eyebrow">Administration</span>
+      <h1>Dashboard</h1>
+      <p class="muted">Gère les comptes et modère les sujets. La suppression d’un message se fait depuis chaque fil.</p>
+    </div>
+
+    <div class="panel-card" style="margin-bottom:24px">
+      <h2 style="text-transform:uppercase;margin-bottom:14px">Comptes</h2>
+      <div id="users"></div>
+    </div>
+
+    <div class="panel-card">
+      <h2 style="text-transform:uppercase;margin-bottom:14px">Sujets</h2>
+      <div id="topics"></div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { api, getUser, isAdmin } from '/assets/js/api.js';
+    import { renderHeader, requireLogin, escapeHtml, formatDate, stateBadge, toast } from '/assets/js/ui.js';
+
+    renderHeader('admin');
+    if (!requireLogin()) throw new Error('redirect');
+    const me = getUser();
+
+    if (!isAdmin()) {
+      document.querySelector('main').innerHTML = '<div class="alert alert--error">Accès réservé aux administrateurs.</div>';
+      throw new Error('not admin');
+    }
+
+    async function loadUsers() {
+      const box = document.getElementById('users');
+      try {
+        const { users } = await api.adminUsers();
+        box.innerHTML = `<table class="admin"><thead><tr>
+          <th>Pseudo</th><th>E-mail</th><th>Rôle</th><th>Statut</th><th></th>
+        </tr></thead><tbody>${users.map((u) => `<tr>
+          <td><a href="/profile.html?u=${encodeURIComponent(u.username)}">@${escapeHtml(u.username)}</a></td>
+          <td class="muted">${escapeHtml(u.email)}</td>
+          <td>${escapeHtml(u.role)}</td>
+          <td>${u.banned ? '<span class="badge badge--private">Banni</span>' : '<span class="badge badge--open">Actif</span>'}</td>
+          <td>${u.role === 'ADMIN' || u.id === me.id ? '' :
+            `<button class="btn btn--sm ${u.banned ? '' : 'danger'}" data-ban="${u.id}" data-state="${u.banned ? '0' : '1'}">${u.banned ? 'Réactiver' : 'Bannir'}</button>`}</td>
+        </tr>`).join('')}</tbody></table>`;
+
+        box.querySelectorAll('[data-ban]').forEach((b) => b.addEventListener('click', async () => {
+          try { await api.adminBan(b.dataset.ban, b.dataset.state === '1'); loadUsers(); toast('Compte mis à jour'); }
+          catch (e) { toast(e.message); }
+        }));
+      } catch (e) { box.innerHTML = `<div class="alert alert--error">${escapeHtml(e.message)}</div>`; }
+    }
+
+    async function loadTopics() {
+      const box = document.getElementById('topics');
+      try {
+        const { topics } = await api.listTopics('?size=all');
+        box.innerHTML = `<table class="admin"><thead><tr>
+          <th>Titre</th><th>Auteur</th><th>État</th><th>Créé</th><th></th>
+        </tr></thead><tbody>${topics.map((t) => `<tr>
+          <td><a href="/topic.html?id=${t.id}">${escapeHtml(t.title)}</a> ${stateBadge(t.state, t.visibility)}</td>
+          <td class="muted">@${escapeHtml(t.author.username)}</td>
+          <td><select data-state="${t.id}">
+            ${['open', 'closed', 'archived'].map((s) => `<option value="${s}" ${t.state === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select></td>
+          <td class="muted">${formatDate(t.createdAt)}</td>
+          <td><button class="btn btn--sm danger" data-del="${t.id}">Suppr.</button></td>
+        </tr>`).join('')}</tbody></table>`;
+
+        box.querySelectorAll('[data-state]').forEach((sel) => sel.addEventListener('change', async () => {
+          try { await api.adminTopicState(sel.dataset.state, sel.value); toast('État mis à jour'); }
+          catch (e) { toast(e.message); }
+        }));
+        box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+          if (!confirm('Supprimer ce sujet ?')) return;
+          try { await api.adminDeleteTopic(b.dataset.del); loadTopics(); toast('Sujet supprimé'); }
+          catch (e) { toast(e.message); }
+        }));
+      } catch (e) { box.innerHTML = `<div class="alert alert--error">${escapeHtml(e.message)}</div>`; }
+    }
+
+    loadUsers();
+    loadTopics();
+  </script>
+</body>
+</html>

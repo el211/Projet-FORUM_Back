@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 
-const { HttpError } = require('./errors/http-error');
 const { errorHandler, notFoundHandler } = require('./middlewares/error-handler');
 const { requestLogger } = require('./middlewares/request-logger');
 const { createAuthMiddleware } = require('./middlewares/auth-middleware');
@@ -44,12 +43,15 @@ function createCorsOptions(config) {
 
   return {
     origin(origin, callback) {
+      // No Origin header (same-origin / curl) or an allow-listed origin: allow.
+      // An unknown cross-origin is simply not granted CORS headers (callback
+      // false) rather than rejected — same-origin requests must still succeed.
       if (!origin || !Array.isArray(corsConfig.origins) || corsConfig.origins.includes(origin)) {
         callback(null, true);
         return;
       }
 
-      callback(new HttpError(403, 'Origin is not allowed by CORS policy'));
+      callback(null, false);
     },
     credentials: Boolean(corsConfig.credentials)
   };

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paramètres · LE FIL</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <header id="topbar"></header>
+
+  <main class="wrap page">
+    <div class="page-head">
+      <span class="eyebrow">Mon compte</span>
+      <h1>Paramètres</h1>
+    </div>
+
+    <div class="panel-card" style="max-width:560px">
+      <div id="status"></div>
+      <form id="form">
+        <div class="field">
+          <label for="bio">Biographie</label>
+          <textarea id="bio" maxlength="500" placeholder="Quelques mots sur toi…"></textarea>
+        </div>
+        <div class="field">
+          <label for="avatar">Photo de profil (URL)</label>
+          <input id="avatar" placeholder="https://…">
+          <p class="hint">Colle l’URL d’une image.</p>
+        </div>
+        <button class="btn btn--primary" type="submit" id="submit">Enregistrer</button>
+      </form>
+    </div>
+  </main>
+
+  <script type="module">
+    import { api, setSession, getToken } from '/assets/js/api.js';
+    import { renderHeader, requireLogin, escapeHtml } from '/assets/js/ui.js';
+
+    renderHeader('profile');
+    if (!requireLogin()) throw new Error('redirect');
+
+    const statusBox = document.getElementById('status');
+
+    async function load() {
+      try {
+        const { profile } = await api.me();
+        document.getElementById('bio').value = profile.bio || '';
+        document.getElementById('avatar').value = profile.avatarUrl || '';
+        // keep the cached session user fresh
+        setSession(getToken(), profile);
+      } catch (e) {
+        statusBox.innerHTML = `<div class="alert alert--error">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusBox.innerHTML = '';
+      const submit = document.getElementById('submit');
+      submit.disabled = true;
+      try {
+        const { profile } = await api.updateMe({
+          bio: document.getElementById('bio').value.trim(),
+          avatarUrl: document.getElementById('avatar').value.trim()
+        });
+        setSession(getToken(), profile);
+        statusBox.innerHTML = '<div class="alert alert--ok">Profil mis à jour.</div>';
+      } catch (err) {
+        statusBox.innerHTML = `<div class="alert alert--error">${escapeHtml(err.message)}</div>`;
+      } finally { submit.disabled = false; }
+    });
+
+    load();
+  </script>
+</body>
+</html>

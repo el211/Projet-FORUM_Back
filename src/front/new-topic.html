@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ouvrir un sujet · LE FIL</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <header id="topbar"></header>
+
+  <main class="wrap page">
+    <div class="page-head">
+      <span class="eyebrow">Nouveau fil</span>
+      <h1>Ouvrir un sujet</h1>
+    </div>
+
+    <div class="panel-card" style="max-width:680px">
+      <div id="error"></div>
+      <form id="form">
+        <div class="field">
+          <label for="title">Titre</label>
+          <input id="title" required maxlength="180">
+        </div>
+        <div class="field">
+          <label for="body">Message</label>
+          <textarea id="body" required placeholder="Développe ton idée…"></textarea>
+        </div>
+        <div class="field">
+          <label for="tags">Tags</label>
+          <input id="tags" placeholder="javascript, entraide, design">
+          <p class="hint">Séparés par des virgules. Lettres, chiffres et tirets.</p>
+        </div>
+        <div class="row">
+          <div class="field" style="flex:1">
+            <label for="visibility">Visibilité</label>
+            <select id="visibility">
+              <option value="public">Public</option>
+              <option value="private">Privé (amis seulement)</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1">
+            <label for="state">État</label>
+            <select id="state">
+              <option value="open">Ouvert</option>
+              <option value="closed">Fermé</option>
+              <option value="archived">Archivé</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn--primary" type="submit" id="submit">Publier le sujet</button>
+      </form>
+    </div>
+  </main>
+
+  <script type="module">
+    import { api } from '/assets/js/api.js';
+    import { renderHeader, requireLogin, escapeHtml } from '/assets/js/ui.js';
+
+    renderHeader('new');
+    if (!requireLogin()) throw new Error('redirect');
+
+    const form = document.getElementById('form');
+    const errorBox = document.getElementById('error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.innerHTML = '';
+      const submit = document.getElementById('submit');
+      submit.disabled = true;
+      try {
+        const { topic } = await api.createTopic({
+          title: document.getElementById('title').value.trim(),
+          body: document.getElementById('body').value.trim(),
+          tags: document.getElementById('tags').value,
+          visibility: document.getElementById('visibility').value,
+          state: document.getElementById('state').value
+        });
+        window.location.href = '/topic.html?id=' + topic.id;
+      } catch (err) {
+        const details = (err.details || []).map((d) => `<li>${escapeHtml(d)}</li>`).join('');
+        errorBox.innerHTML = `<div class="alert alert--error">${escapeHtml(err.message)}${details ? `<ul style="margin:6px 0 0">${details}</ul>` : ''}</div>`;
+        submit.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

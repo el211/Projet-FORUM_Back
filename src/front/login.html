@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion · LE FIL</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <header id="topbar"></header>
+
+  <main class="wrap narrow">
+    <div class="panel-card">
+      <span class="eyebrow">Bon retour</span>
+      <h1 style="font-size:2.2rem;text-transform:uppercase;margin:6px 0 18px">Connexion</h1>
+      <div id="error"></div>
+      <form id="form">
+        <div class="field">
+          <label for="identifier">Pseudo ou e-mail</label>
+          <input id="identifier" name="identifier" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="password">Mot de passe</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn--primary btn--block" type="submit" id="submit">Se connecter</button>
+      </form>
+      <p class="hint" style="margin-top:16px">Pas encore de compte ? <a href="/register.html">Rejoindre LE FIL</a></p>
+    </div>
+  </main>
+
+  <script type="module">
+    import { api, setSession } from '/assets/js/api.js';
+    import { renderHeader, showError, getQueryParam } from '/assets/js/ui.js';
+
+    renderHeader('login');
+    const form = document.getElementById('form');
+    const errorBox = document.getElementById('error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.innerHTML = '';
+      const submit = document.getElementById('submit');
+      submit.disabled = true;
+      try {
+        const data = await api.login(
+          document.getElementById('identifier').value.trim(),
+          document.getElementById('password').value
+        );
+        setSession(data.token, data.user);
+        window.location.href = getQueryParam('next') || '/';
+      } catch (err) {
+        showError(errorBox, err.message || 'Connexion impossible');
+        submit.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

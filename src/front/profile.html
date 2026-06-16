@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profil · LE FIL</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <header id="topbar"></header>
+
+  <main class="wrap page">
+    <div id="profile"></div>
+    <div id="social" class="feed" style="border:0;padding-top:24px"></div>
+  </main>
+
+  <script type="module">
+    import { api, getUser, isLoggedIn } from '/assets/js/api.js';
+    import { renderHeader, requireLogin, escapeHtml, formatDate, avatar, toast } from '/assets/js/ui.js';
+
+    renderHeader('profile');
+    const me = getUser();
+    const wanted = new URLSearchParams(location.search).get('u');
+    const isOwn = !wanted || (me && wanted.toLowerCase() === me.username.toLowerCase());
+
+    if (isOwn && !requireLogin()) throw new Error('redirect');
+
+    function statBlock(p) {
+      return `<div class="stat-grid" style="margin-top:18px">
+        <div class="stat"><div class="num">${p.topicCount ?? 0}</div><div class="lbl">Sujets</div></div>
+        <div class="stat"><div class="num">${p.messageCount ?? 0}</div><div class="lbl">Messages</div></div>
+        <div class="stat"><div class="num">${p.role === 'ADMIN' ? '★' : '•'}</div><div class="lbl">${escapeHtml(p.role || 'USER')}</div></div>
+      </div>`;
+    }
+
+    function friendButton(p) {
+      if (isOwn || !isLoggedIn()) return '';
+      const f = p.friendship;
+      if (f && f.status === 'accepted') return '<span class="badge badge--open">Amis</span>';
+      if (f && f.status === 'pending') return '<span class="badge badge--closed">Demande en attente</span>';
+      return `<button class="btn btn--sm btn--primary" id="add-friend">Ajouter en ami</button>`;
+    }
+
+    async function loadProfile() {
+      const box = document.getElementById('profile');
+      try {
+        const data = isOwn ? await api.me() : await api.profile(wanted);
+        const p = data.profile;
+        const bio = p.bio ? escapeHtml(p.bio) : '<span class="muted">Pas encore de bio.</span>';
+        box.innerHTML = `<div class="panel-card">
+          <div class="row" style="gap:18px">
+            <span style="font-size:0">${avatar(p)}</span>
+            <div style="flex:1">
+              <span class="eyebrow">Profil</span>
+              <h1 style="font-size:clamp(1.8rem,5vw,2.6rem);text-transform:uppercase">@${escapeHtml(p.username)}</h1>
+              <p class="topic-meta" style="margin-top:4px">
+                ${p.lastLoginAt ? '<span>vu ' + formatDate(p.lastLoginAt) + '</span>' : ''}
+                <span>inscrit ${formatDate(p.createdAt)}</span>
+              </p>
+            </div>
+            <div>${friendButton(p)} ${isOwn ? '<a class="btn btn--sm" href="/settings.html">Paramètres</a>' : ''}</div>
+          </div>
+          <p class="msg-body" style="margin-top:14px">${bio}</p>
+          ${statBlock(p)}
+        </div>`;
+
+        const add = document.getElementById('add-friend');
+        if (add) add.addEventListener('click', async () => {
+          try { await api.addFriend(p.username); toast('Demande envoyée'); loadProfile(); }
+          catch (e) { toast(e.message); }
+        });
+      } catch (e) {
+        box.innerHTML = `<div class="alert alert--error">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    async function loadSocial() {
+      if (!isOwn) { document.getElementById('social').innerHTML = ''; return; }
+      const box = document.getElementById('social');
+      try {
+        const [{ requests }, { friends }] = await Promise.all([api.friendRequests(), api.myFriends()]);
+        const reqHtml = requests.length
+          ? requests.map((r) => `<div class="row" style="justify-content:space-between;margin-bottom:8px">
+              <span>${avatar(r.user)} @${escapeHtml(r.user.username)}</span>
+              <span class="row">
+                <button class="btn btn--sm btn--primary" data-accept="${r.id}">Accepter</button>
+                <button class="btn btn--sm" data-decline="${r.id}">Refuser</button>
+              </span></div>`).join('')
+          : '<p class="muted">Aucune demande.</p>';
+        const friendsHtml = friends.length
+          ? friends.map((f) => `<a class="tag" href="/profile.html?u=${encodeURIComponent(f.username)}">@${escapeHtml(f.username)}</a>`).join(' ')
+          : '<p class="muted">Pas encore d’amis.</p>';
+
+        box.innerHTML = `
+          <div class="panel"><h4>Demandes d’amis</h4><div id="reqs">${reqHtml}</div></div>
+          <div class="panel"><h4>Amis</h4><div class="tag-cloud">${friendsHtml}</div></div>`;
+
+        box.querySelectorAll('[data-accept]').forEach((b) => b.addEventListener('click', async () => {
+          try { await api.acceptFriend(b.dataset.accept); loadSocial(); } catch (e) { toast(e.message); }
+        }));
+        box.querySelectorAll('[data-decline]').forEach((b) => b.addEventListener('click', async () => {
+          try { await api.declineFriend(b.dataset.decline); loadSocial(); } catch (e) { toast(e.message); }
+        }));
+      } catch (e) { box.innerHTML = ''; }
+    }
+
+    loadProfile();
+    loadSocial();
+  </script>
+</body>
+</html>

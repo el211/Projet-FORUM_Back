@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sujet · LE FIL</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <header id="topbar"></header>
+
+  <main class="wrap page">
+    <a href="/" class="eyebrow" style="text-decoration:none">← retour au fil</a>
+    <div id="topic"></div>
+
+    <div class="section-head" style="margin-top:32px">
+      <h2 id="msg-count">Messages</h2>
+      <div class="toolbar">
+        <label for="sort">Trier</label>
+        <select id="sort">
+          <option value="recent">Plus récents</option>
+          <option value="oldest">Plus anciens</option>
+          <option value="popularity">Populaires</option>
+        </select>
+        <label for="size">Lot</label>
+        <select id="size">
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="all">Tout</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="messages"></div>
+    <div id="pager" class="pager"></div>
+
+    <div id="composer" style="margin-top:28px"></div>
+  </main>
+
+  <script type="module">
+    import { api, getUser, isLoggedIn, isAdmin } from '/assets/js/api.js';
+    import { renderHeader, escapeHtml, formatDate, stateBadge, avatar, signalMeter, toast } from '/assets/js/ui.js';
+
+    renderHeader();
+    const id = new URLSearchParams(location.search).get('id');
+    const me = getUser();
+    let topic = null;
+    let state = { sort: 'recent', size: '10', page: 1 };
+
+    if (!id) {
+      document.getElementById('topic').innerHTML = '<div class="alert alert--error">Sujet introuvable.</div>';
+      throw new Error('no id');
+    }
+
+    function canDeleteMessage(message) {
+      if (!me) return false;
+      return isAdmin() || message.author.id === me.id || (topic && topic.author.id === me.id);
+    }
+
+    async function loadTopic() {
+      const box = document.getElementById('topic');
+      try {
+        const data = await api.getTopic(id);
+        topic = data.topic;
+      } catch (e) {
+        box.innerHTML = `<div class="alert alert--error">${escapeHtml(e.message)}</div>`;
+        throw e;
+      }
+
+      const isOwner = me && topic.author.id === me.id;
+      const tags = topic.tags.map((t) => `<a class="tag" href="/?tag=${encodeURIComponent(t)}">#${escapeHtml(t)}</a>`).join('');
+
+      let controls = '';
+      if (isOwner) {
+        controls = `<div class="row" style="margin-top:12px">
+          <button class="btn btn--sm" id="edit-topic">Modifier</button>
+          <button class="btn btn--sm danger" id="delete-topic">Supprimer le sujet</button>
+        </div>`;
+      } else if (isAdmin()) {
+        controls = `<div class="row" style="margin-top:12px">
+          <select id="admin-state">
+            <option value="open">Ouvert</option><option value="closed">Fermé</option><option value="archived">Archivé</option>
+          </select>
+          <button class="btn btn--sm" id="admin-set-state">Changer l'état</button>
+          <button class="btn btn--sm danger" id="admin-del-topic">Supprimer (admin)</button>
+        </div>`;
+      }
+
+      box.innerHTML = `
+        <div class="panel-card" style="margin-top:14px">
+          <div class="row" style="justify-content:space-between">
+            <h1 style="font-size:clamp(1.8rem,5vw,2.6rem);text-transform:uppercase">${escapeHtml(topic.title)}</h1>
+            ${stateBadge(topic.state, topic.visibility)}
+          </div>
+          <div class="card-foot" style="margin:10px 0">
+            ${avatar(topic.author)}
+            <div class="topic-meta">
+              <span><a href="/profile.html?u=${encodeURIComponent(topic.author.username)}">@${escapeHtml(topic.author.username)}</a></span>
+              <span>${formatDate(topic.createdAt)}</span>
+            </div>
+            <span class="spacer"></span>
+            <div class="tags">${tags}</div>
+          </div>
+          <p class="msg-body" style="font-size:1.05rem">${escapeHtml(topic.body)}</p>
+          ${controls}
+        </div>`;
+
+      wireTopicControls(isOwner);
+    }
+
+    function wireTopicControls(isOwner) {
+      const del = document.getElementById('delete-topic') || document.getElementById('admin-del-topic');
+      if (del) del.addEventListener('click', async () => {
+        if (!confirm('Supprimer ce sujet et tous ses messages ?')) return;
+        try {
+          await (isOwner ? api.deleteTopic(id) : api.adminDeleteTopic(id));
+          window.location.href = '/';
+        } catch (e) { toast(e.message); }
+      });
+
+      const edit = document.getElementById('edit-topic');
+      if (edit) edit.addEventListener('click', openEditForm);
+
+      const setState = document.getElementById('admin-set-state');
+      if (setState) setState.addEventListener('click', async () => {
+        try {
+          await api.adminTopicState(id, document.getElementById('admin-state').value);
+          toast('État mis à jour'); loadTopic();
+        } catch (e) { toast(e.message); }
+      });
+    }
+
+    function openEditForm() {
+      const box = document.getElementById('topic');
+      box.innerHTML = `<div class="panel-card" style="margin-top:14px">
+        <h2 style="text-transform:uppercase;margin-bottom:14px">Modifier le sujet</h2>
+        <div class="field"><label>Titre</label><input id="e-title" value="${escapeHtml(topic.title)}"></div>
+        <div class="field"><label>Message</label><textarea id="e-body">${escapeHtml(topic.body)}</textarea></div>
+        <div class="field"><label>Tags</label><input id="e-tags" value="${escapeHtml(topic.tags.join(', '))}"></div>
+        <div class="row">
+          <div class="field" style="flex:1"><label>Visibilité</label>
+            <select id="e-visibility"><option value="public">Public</option><option value="private">Privé</option></select></div>
+          <div class="field" style="flex:1"><label>État</label>
+            <select id="e-state"><option value="open">Ouvert</option><option value="closed">Fermé</option><option value="archived">Archivé</option></select></div>
+        </div>
+        <div class="row"><button class="btn btn--primary" id="e-save">Enregistrer</button>
+        <button class="btn btn--ghost" id="e-cancel">Annuler</button></div>
+      </div>`;
+      document.getElementById('e-visibility').value = topic.visibility;
+      document.getElementById('e-state').value = topic.state;
+      document.getElementById('e-cancel').addEventListener('click', loadTopic);
+      document.getElementById('e-save').addEventListener('click', async () => {
+        try {
+          await api.updateTopic(id, {
+            title: document.getElementById('e-title').value.trim(),
+            body: document.getElementById('e-body').value.trim(),
+            tags: document.getElementById('e-tags').value,
+            visibility: document.getElementById('e-visibility').value,
+            state: document.getElementById('e-state').value
+          });
+          toast('Sujet mis à jour'); loadTopic();
+        } catch (e) { toast(e.message); }
+      });
+    }
+
+    function messageRow(m) {
+      const likeOn = m.myVote === 1 ? 'on-like' : '';
+      const dislikeOn = m.myVote === -1 ? 'on-dislike' : '';
+      const img = m.imageUrl ? `<img class="msg-img" src="${escapeHtml(m.imageUrl)}" alt="image jointe">` : '';
+      const del = canDeleteMessage(m) ? `<button class="btn btn--sm danger" data-del="${m.id}">Suppr.</button>` : '';
+      return `<article class="message">
+        <div class="vote-col">
+          <button class="vote-btn ${likeOn}" data-like="${m.id}" aria-label="J'aime" ${isLoggedIn() ? '' : 'disabled'}>▲</button>
+          <span class="score">${m.score}</span>
+          ${signalMeter(m.score)}
+          <button class="vote-btn ${dislikeOn}" data-dislike="${m.id}" aria-label="Je n'aime pas" ${isLoggedIn() ? '' : 'disabled'}>▼</button>
+        </div>
+        <div>
+          <div class="msg-head">
+            ${avatar(m.author)}
+            <a href="/profile.html?u=${encodeURIComponent(m.author.username)}">@${escapeHtml(m.author.username)}</a>
+            <span>· ${formatDate(m.createdAt)}</span>
+            <span class="spacer"></span>
+            ${del}
+          </div>
+          <p class="msg-body">${escapeHtml(m.body)}</p>
+          ${img}
+        </div>
+      </article>`;
+    }
+
+    async function loadMessages() {
+      const target = document.getElementById('messages');
+      const query = `?sort=${state.sort}&size=${state.size}&page=${state.page}`;
+      try {
+        const data = await api.listMessages(id, query);
+        document.getElementById('msg-count').textContent = `${data.pagination.total} message${data.pagination.total > 1 ? 's' : ''}`;
+        target.innerHTML = data.messages.length
+          ? data.messages.map(messageRow).join('')
+          : '<div class="empty">Aucun message. Lance la discussion.</div>';
+        wireMessageActions();
+        renderPager(data.pagination);
+      } catch (e) {
+        target.innerHTML = `<div class="alert alert--error">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function wireMessageActions() {
+      document.querySelectorAll('[data-like]').forEach((b) =>
+        b.addEventListener('click', () => vote(api.like, b.dataset.like)));
+      document.querySelectorAll('[data-dislike]').forEach((b) =>
+        b.addEventListener('click', () => vote(api.dislike, b.dataset.dislike)));
+      document.querySelectorAll('[data-del]').forEach((b) =>
+        b.addEventListener('click', async () => {
+          if (!confirm('Supprimer ce message ?')) return;
+          try {
+            await (isAdmin() && !(topic.author.id === (me && me.id)) ? api.adminDeleteMessage(b.dataset.del) : api.deleteMessage(b.dataset.del));
+            loadMessages();
+          } catch (e) { toast(e.message); }
+        }));
+    }
+
+    async function vote(fn, mid) {
+      try { await fn(mid); loadMessages(); }
+      catch (e) { toast(e.message); }
+    }
+
+    function renderPager(p) {
+      const pager = document.getElementById('pager');
+      if (!p || p.size === 'all' || p.totalPages <= 1) { pager.innerHTML = ''; return; }
+      const prev = p.page > 1 ? `<button class="btn btn--sm" id="prev">← Précédent</button>` : '';
+      const next = p.page < p.totalPages ? `<button class="btn btn--sm" id="next">Suivant →</button>` : '';
+      pager.innerHTML = `${prev}<span>page ${p.page} / ${p.totalPages}</span>${next}`;
+      const prevBtn = document.getElementById('prev');
+      const nextBtn = document.getElementById('next');
+      if (prevBtn) prevBtn.addEventListener('click', () => { state.page -= 1; loadMessages(); });
+      if (nextBtn) nextBtn.addEventListener('click', () => { state.page += 1; loadMessages(); });
+    }
+
+    function renderComposer() {
+      const box = document.getElementById('composer');
+      if (!isLoggedIn()) {
+        box.innerHTML = `<div class="empty"><a href="/login.html?next=${encodeURIComponent(location.pathname + location.search)}">Connecte-toi</a> pour répondre.</div>`;
+        return;
+      }
+      if (topic.state !== 'open') {
+        box.innerHTML = `<div class="empty">Ce sujet est ${topic.state === 'closed' ? 'fermé' : 'archivé'} : impossible de poster.</div>`;
+        return;
+      }
+      box.innerHTML = `<div class="panel-card">
+        <h3 style="text-transform:uppercase;margin-bottom:12px">Répondre</h3>
+        <div id="composer-error"></div>
+        <form id="composer-form">
+          <div class="field"><textarea id="c-body" required placeholder="Ta réponse…"></textarea></div>
+          <div class="row">
+            <input type="file" id="c-image" accept="image/*" style="flex:1">
+            <button class="btn btn--primary" type="submit" id="c-submit">Envoyer</button>
+          </div>
+          <p class="hint">Image facultative (PNG/JPEG/GIF/WebP, 5 Mo max).</p>
+        </form>
+      </div>`;
+
+      document.getElementById('composer-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submit = document.getElementById('c-submit');
+        submit.disabled = true;
+        try {
+          const form = new FormData();
+          form.append('body', document.getElementById('c-body').value.trim());
+          const file = document.getElementById('c-image').files[0];
+          if (file) form.append('image', file);
+          await api.postMessage(id, form);
+          document.getElementById('c-body').value = '';
+          document.getElementById('c-image').value = '';
+          state.page = 1; state.sort = 'recent';
+          document.getElementById('sort').value = 'recent';
+          loadMessages();
+          toast('Message publié');
+        } catch (err) {
+          document.getElementById('composer-error').innerHTML = `<div class="alert alert--error">${escapeHtml(err.message)}</div>`;
+        } finally { submit.disabled = false; }
+      });
+    }
+
+    document.getElementById('sort').addEventListener('change', (e) => { state.sort = e.target.value; state.page = 1; loadMessages(); });
+    document.getElementById('size').addEventListener('change', (e) => { state.size = e.target.value; state.page = 1; loadMessages(); });
+
+    (async () => {
+      await loadTopic();
+      renderComposer();
+      loadMessages();
+    })();
+  </script>
+</body>
+</html>

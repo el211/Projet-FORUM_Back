@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LE FIL — le forum des étudiants</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <header id="topbar"></header>
+
+  <section class="hero">
+    <div class="wrap">
+      <span class="eyebrow">Forum étudiant · édition libre</span>
+      <h1>LE FIL<span class="echo" aria-hidden="true">LE FIL</span></h1>
+      <p class="lede">Pose ta question, lance un débat, fais monter le signal. Les meilleurs messages remontent ; le bruit redescend.</p>
+      <div class="actions">
+        <a class="btn btn--primary" href="/new-topic.html">Ouvrir un sujet</a>
+        <a class="btn btn--ghost" href="#feed">Parcourir le fil</a>
+      </div>
+    </div>
+  </section>
+
+  <main class="wrap feed" id="feed">
+    <div>
+      <div class="section-head">
+        <h2 id="feed-title">Derniers sujets</h2>
+        <div class="toolbar">
+          <label for="size">Lot</label>
+          <select id="size">
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="all">Tout</option>
+          </select>
+        </div>
+      </div>
+      <div id="topics" class="card-list"></div>
+      <div id="pager" class="pager"></div>
+    </div>
+
+    <aside class="side">
+      <div class="panel">
+        <h4>Rechercher</h4>
+        <form class="searchbar" id="search-form">
+          <input type="search" id="search" placeholder="titre ou tag…" aria-label="Rechercher">
+          <button class="btn btn--sm" type="submit">OK</button>
+        </form>
+        <p class="hint">La recherche couvre le titre et les tags.</p>
+      </div>
+      <div class="panel">
+        <h4>Catégories</h4>
+        <div class="tag-cloud" id="tag-cloud"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module">
+    import { api } from '/assets/js/api.js';
+    import { renderHeader, escapeHtml, formatDate, stateBadge, avatar, getQueryParam } from '/assets/js/ui.js';
+
+    renderHeader('home');
+
+    const params = new URLSearchParams(location.search);
+    const search = params.get('search') || '';
+    const tag = params.get('tag') || '';
+    const size = params.get('size') || '10';
+    const page = Number(params.get('page') || '1');
+
+    document.getElementById('search').value = search;
+    document.getElementById('size').value = size;
+
+    function buildLink(overrides) {
+      const next = new URLSearchParams({ search, tag, size, page });
+      Object.entries(overrides).forEach(([k, v]) => {
+        if (v === '' || v == null) next.delete(k); else next.set(k, v);
+      });
+      return '/?' + next.toString();
+    }
+
+    document.getElementById('search-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      window.location.href = buildLink({ search: document.getElementById('search').value.trim(), page: 1 });
+    });
+    document.getElementById('size').addEventListener('change', (e) => {
+      window.location.href = buildLink({ size: e.target.value, page: 1 });
+    });
+
+    function topicCard(t) {
+      const tags = t.tags.map((name) => `<a class="tag" href="${buildLink({ tag: name, page: 1 })}">#${escapeHtml(name)}</a>`).join('');
+      return `<article class="topic-card">
+        <div class="row" style="justify-content:space-between">
+          <h3><a href="/topic.html?id=${t.id}">${escapeHtml(t.title)}</a></h3>
+          ${stateBadge(t.state, t.visibility)}
+        </div>
+        <p class="topic-excerpt">${escapeHtml((t.body || '').slice(0, 160))}${t.body && t.body.length > 160 ? '…' : ''}</p>
+        <div class="card-foot">
+          ${avatar(t.author)}
+          <div class="topic-meta">
+            <span>@${escapeHtml(t.author.username)}</span>
+            <span>${formatDate(t.createdAt)}</span>
+            <span>${t.messageCount} message${t.messageCount > 1 ? 's' : ''}</span>
+          </div>
+          <span class="spacer"></span>
+          <div class="tags">${tags}</div>
+        </div>
+      </article>`;
+    }
+
+    async function loadTags() {
+      try {
+        const { tags } = await api.listTags();
+        const cloud = document.getElementById('tag-cloud');
+        const all = `<a class="tag ${tag ? '' : 'tag--active'}" href="${buildLink({ tag: '', page: 1 })}">tout</a>`;
+        cloud.innerHTML = all + tags.map((tg) =>
+          `<a class="tag ${tag === tg.name ? 'tag--active' : ''}" href="${buildLink({ tag: tg.name, page: 1 })}">#${escapeHtml(tg.name)} (${tg.topicCount})</a>`
+        ).join('');
+      } catch (_e) { /* ignore */ }
+    }
+
+    async function load() {
+      const query = new URLSearchParams();
+      if (search) query.set('search', search);
+      if (tag) query.set('tag', tag);
+      query.set('size', size);
+      query.set('page', page);
+
+      const title = document.getElementById('feed-title');
+      if (tag) title.textContent = '#' + tag;
+      else if (search) title.textContent = 'Résultats : ' + search;
+
+      const target = document.getElementById('topics');
+      try {
+        const data = await api.listTopics('?' + query.toString());
+        if (!data.topics.length) {
+          target.innerHTML = '<div class="empty">Aucun sujet ici pour l’instant. À toi d’ouvrir le premier.</div>';
+        } else {
+          target.innerHTML = data.topics.map(topicCard).join('');
+        }
+        renderPager(data.pagination);
+      } catch (e) {
+        target.innerHTML = `<div class="alert alert--error">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderPager(p) {
+      const pager = document.getElementById('pager');
+      if (!p || p.size === 'all' || p.totalPages <= 1) { pager.innerHTML = ''; return; }
+      const prev = p.page > 1 ? `<a class="btn btn--sm" href="${buildLink({ page: p.page - 1 })}">← Précédent</a>` : '';
+      const next = p.page < p.totalPages ? `<a class="btn btn--sm" href="${buildLink({ page: p.page + 1 })}">Suivant →</a>` : '';
+      pager.innerHTML = `${prev}<span>page ${p.page} / ${p.totalPages} · ${p.total} sujets</span>${next}`;
+    }
+
+    loadTags();
+    load();
+  </script>
+</body>
+</html>

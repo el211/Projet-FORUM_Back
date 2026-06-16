@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rejoindre · LE FIL</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <header id="topbar"></header>
+
+  <main class="wrap narrow">
+    <div class="panel-card">
+      <span class="eyebrow">Nouvelle voix</span>
+      <h1 style="font-size:2.2rem;text-transform:uppercase;margin:6px 0 18px">Rejoindre</h1>
+      <div id="error"></div>
+      <form id="form">
+        <div class="field">
+          <label for="username">Pseudo</label>
+          <input id="username" name="username" autocomplete="username" required>
+          <p class="hint">Lettres et chiffres uniquement.</p>
+        </div>
+        <div class="field">
+          <label for="email">E-mail</label>
+          <input id="email" name="email" type="email" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="password">Mot de passe</label>
+          <input id="password" name="password" type="password" autocomplete="new-password" required>
+          <p class="hint">8 caractères min., une majuscule, un caractère spécial.</p>
+        </div>
+        <button class="btn btn--primary btn--block" type="submit" id="submit">Créer mon compte</button>
+      </form>
+      <p class="hint" style="margin-top:16px">Déjà inscrit·e ? <a href="/login.html">Se connecter</a></p>
+    </div>
+  </main>
+
+  <script type="module">
+    import { api, setSession } from '/assets/js/api.js';
+    import { renderHeader, escapeHtml } from '/assets/js/ui.js';
+
+    renderHeader('register');
+    const form = document.getElementById('form');
+    const errorBox = document.getElementById('error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.innerHTML = '';
+      const submit = document.getElementById('submit');
+      submit.disabled = true;
+      try {
+        const data = await api.register(
+          document.getElementById('username').value.trim(),
+          document.getElementById('email').value.trim(),
+          document.getElementById('password').value
+        );
+        // Registration does not auto-issue a token by default — sign in next.
+        if (data.token) {
+          setSession(data.token, data.user);
+          window.location.href = '/';
+        } else {
+          const login = await api.login(document.getElementById('username').value.trim(), document.getElementById('password').value);
+          setSession(login.token, login.user);
+          window.location.href = '/';
+        }
+      } catch (err) {
+        const details = (err.details || []).map((d) => `<li>${escapeHtml(d)}</li>`).join('');
+        errorBox.innerHTML = `<div class="alert alert--error">${escapeHtml(err.message)}${details ? `<ul style="margin:6px 0 0">${details}</ul>` : ''}</div>`;
+        submit.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
