@@ -3,21 +3,22 @@
   "version": "1.0.0",
   "private": true,
   "type": "commonjs",
-  "description": "Spring Boot-style authentication backend in pure JavaScript",
+  "description": "Forum backend in pure JavaScript (Express + MySQL), no front-end framework",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "check": "node --check src/server.js"
+    "check": "node --check src/server.js",
+    "db:setup": "node scripts/db-setup.js"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "helmet": "^7.2.0",
     "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.11.5",
     "nodemailer": "^6.10.1",
     "uuid": "^9.0.1"
   }
 }
-

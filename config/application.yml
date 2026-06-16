@@ -14,9 +14,23 @@ app:
     origins:
       - http://localhost:3000
       - http://localhost:5173
-  storage:
-    driver: file
-    filePath: ./data/users.json
+  database:
+    host: 127.0.0.1
+    port: 3306
+    user: root
+    password: ''
+    database: forum
+    connectionLimit: 10
+  uploads:
+    dir: ./data/uploads
+    publicPath: /uploads
+    maxFileSizeMb: 5
+  pagination:
+    defaultSize: 10
+    allowedSizes:
+      - 10
+      - 20
+      - 30
   auth:
     issueTokenOnRegister: false
     identifierCaseInsensitive: true

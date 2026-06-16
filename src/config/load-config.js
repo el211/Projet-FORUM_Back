@@ -95,6 +95,14 @@ function validateConfig(config) {
   if (!config.app?.api?.prefix) {
     throw new Error('Missing app.api.prefix in configuration');
   }
+
+  if (!config.app?.database?.database) {
+    throw new Error('Missing app.database configuration (MySQL is required)');
+  }
+
+  if (config.app.profile === 'prod' && config.app.security.jwt.secret === 'change-me-in-production') {
+    throw new Error('Refusing to start in prod with the default JWT secret');
+  }
 }
 
 function loadConfig() {
