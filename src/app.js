@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -6,11 +7,33 @@ const { HttpError } = require('./errors/http-error');
 const { errorHandler, notFoundHandler } = require('./middlewares/error-handler');
 const { requestLogger } = require('./middlewares/request-logger');
 const { createAuthMiddleware } = require('./middlewares/auth-middleware');
+const { createUploadMiddleware } = require('./middlewares/upload-middleware');
+
 const { UserRepository } = require('./repositories/user-repository');
+const { TopicRepository } = require('./repositories/topic-repository');
+const { MessageRepository } = require('./repositories/message-repository');
+const { FriendshipRepository } = require('./repositories/friendship-repository');
+
 const { AuthService } = require('./services/auth-service');
 const { MailService } = require('./services/mail-service');
+const { TopicService } = require('./services/topic-service');
+const { MessageService } = require('./services/message-service');
+const { AdminService } = require('./services/admin-service');
+const { ProfileService } = require('./services/profile-service');
+const { FriendshipService } = require('./services/friendship-service');
+
 const { createAuthController } = require('./controllers/auth-controller');
+const { createTopicController } = require('./controllers/topic-controller');
+const { createMessageController } = require('./controllers/message-controller');
+const { createAdminController } = require('./controllers/admin-controller');
+const { createProfileController } = require('./controllers/profile-controller');
+const { createFriendshipController } = require('./controllers/friendship-controller');
+
 const { createAuthRoutes } = require('./routes/auth-routes');
+const { createTopicRoutes } = require('./routes/topic-routes');
+const { createMessageRoutes } = require('./routes/message-routes');
+const { createAdminRoutes } = require('./routes/admin-routes');
+const { createProfileRoutes } = require('./routes/profile-routes');
 
 function createCorsOptions(config) {
   const corsConfig = config.app.cors || {};
@@ -34,15 +57,43 @@ function createCorsOptions(config) {
 
 function createApp(config, logger) {
   const app = express();
+  const apiPrefix = config.app.api.prefix;
   const corsOptions = createCorsOptions(config);
-  const userRepository = new UserRepository(config);
+
+  // Repositories (all backed by the shared MySQL pool).
+  const userRepository = new UserRepository();
+  const topicRepository = new TopicRepository();
+  const messageRepository = new MessageRepository();
+  const friendshipRepository = new FriendshipRepository();
+
+  // Services.
   const mailService = new MailService(config, logger);
   const authService = new AuthService(config, userRepository, mailService);
-  const authMiddleware = createAuthMiddleware(config, userRepository);
-  const authController = createAuthController(authService);
+  const topicService = new TopicService(config, topicRepository, friendshipRepository);
+  const messageService = new MessageService(config, messageRepository, topicRepository, topicService);
+  const adminService = new AdminService(userRepository, topicRepository, messageRepository);
+  const profileService = new ProfileService(userRepository, friendshipRepository);
+  const friendshipService = new FriendshipService(userRepository, friendshipRepository);
 
-  app.use(helmet());
+  // Middlewares + controllers.
+  const middleware = createAuthMiddleware(config, userRepository);
+  const uploadImage = createUploadMiddleware(config);
+  const authController = createAuthController(authService);
+  const topicController = createTopicController(topicService, messageService, topicRepository);
+  const messageController = createMessageController(messageService);
+  const adminController = createAdminController(adminService);
+  const profileController = createProfileController(profileService, friendshipService);
+  const friendshipController = createFriendshipController(friendshipService);
+
+  // helmet with CSP relaxed enough for the static front-end + inline bootstrap.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' }
+    })
+  );
   app.use(express.json({ limit: config.server.jsonBodyLimit || '1mb' }));
+  app.use(express.urlencoded({ extended: true }));
 
   if (corsOptions) {
     app.use(cors(corsOptions));
@@ -52,16 +103,14 @@ function createApp(config, logger) {
     app.use(requestLogger(logger));
   }
 
-  app.get('/', (_request, response) => {
-    response.json({
-      name: config.app.name,
-      profile: config.app.profile,
-      apiPrefix: config.app.api.prefix,
-      status: 'UP'
-    });
-  });
+  // Uploaded message images, served statically.
+  app.use(
+    config.app.uploads.publicPath || '/uploads',
+    express.static(path.resolve(process.cwd(), config.app.uploads.dir))
+  );
 
-  app.get(`${config.app.api.prefix}/health`, (_request, response) => {
+  // Health check.
+  app.get(`${apiPrefix}/health`, (_request, response) => {
     response.json({
       status: 'UP',
       application: config.app.name,
@@ -70,12 +119,23 @@ function createApp(config, logger) {
     });
   });
 
-  app.use(
-    `${config.app.api.prefix}/auth`,
-    createAuthRoutes(authController, authMiddleware.requireAuth)
-  );
+  // API (data) routes.
+  app.use(`${apiPrefix}/auth`, createAuthRoutes(authController, middleware.requireAuth));
+  app.use(`${apiPrefix}/topics`, createTopicRoutes(topicController, middleware, uploadImage));
+  app.get(`${apiPrefix}/tags`, topicController.listTags);
+  app.use(`${apiPrefix}/messages`, createMessageRoutes(messageController, middleware));
+  app.use(`${apiPrefix}/admin`, createAdminRoutes(adminController, middleware));
+  app.use(`${apiPrefix}/profiles`, createProfileRoutes(profileController, friendshipController, middleware));
 
-  app.use(notFoundHandler);
+  // Static front-end (plain HTML/CSS/JS, no framework) served from src/front.
+  const frontDir = path.join(__dirname, 'front');
+  app.use(express.static(frontDir));
+  app.get('/', (_request, response) => {
+    response.sendFile(path.join(frontDir, 'index.html'));
+  });
+
+  // 404 + error handling last.
+  app.use(`${apiPrefix}`, notFoundHandler);
   app.use(errorHandler(logger));
 
   return app;
@@ -84,4 +144,3 @@ function createApp(config, logger) {
 module.exports = {
   createApp
 };
-
