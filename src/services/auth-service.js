@@ -1,9 +1,9 @@
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 
 const { HttpError } = require('../errors/http-error');
 const { sanitizeUser } = require('../utils/sanitize-user');
+const { createPasswordHash, verifyPassword } = require('../utils/password');
 const { validateLoginPayload, validateRegistrationPayload } = require('../validators/auth-validator');
 
 class AuthService {
@@ -56,13 +56,17 @@ class AuthService {
       throw new HttpError(409, 'Email is already used');
     }
 
+    const { salt, hash } = createPasswordHash(validatedPayload.password);
+
     const user = {
       id: uuidv4(),
       username: validatedPayload.username,
       usernameNormalized,
       email: validatedPayload.email,
       emailNormalized,
-      passwordHash: bcrypt.hashSync(validatedPayload.password, 10),
+      passwordHash: hash,
+      passwordSalt: salt,
+      role: 'USER',
       roles: ['USER'],
       createdAt: new Date().toISOString()
     };
@@ -88,9 +92,15 @@ class AuthService {
     const identifierNormalized = this.normalizeIdentifier(validatedPayload.identifier);
     const user = await this.userRepository.findByIdentifier(identifierNormalized);
 
-    if (!user || !bcrypt.compareSync(validatedPayload.password, user.passwordHash)) {
+    if (!user || !verifyPassword(validatedPayload.password, user.passwordSalt, user.passwordHash)) {
       throw new HttpError(401, 'Invalid credentials');
     }
+
+    if (user.banned) {
+      throw new HttpError(403, 'This account has been banned');
+    }
+
+    await this.userRepository.updateLastLogin(user.id);
 
     return {
       token: this.issueAccessToken(user),
